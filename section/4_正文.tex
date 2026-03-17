@@ -1,0 +1,29 @@
+\chapter{基于异构约束观测输入的模仿学习网络与组合机制}
+\label{chap:ral}
+
+\section{引言}
+生成式策略在分布外环境中，对"约束观测"响应能力不足和容易灾难性遗忘......
+
+\section{ConstrainNet：面向异构约束的残差注入架构设计}
+
+\subsection{预训练 Diffusion Policy 骨干网络冻结与防遗忘机制（Catastrophic Forgetting 规避）}
+
+\subsection{空间与运动学异构约束的统一多层感知机（MLP）特征编码}
+
+\subsection{基于零初始化卷积（Zero-Convolution）的 U-Net 跳跃连接残差注入原理}
+
+\section{零样本多约束组合（Zero-Shot Composition）的数学机理}
+
+\subsection{特征空间解耦与正交性分析（基于 UMAP/t-SNE 可视化与余弦相似度）}
+
+\subsection{独立约束模块的线性加权叠加原理与数学证明}
+
+\section{ConstrainNet 机制的仿真验证与消融实验}
+
+\subsection{PushT 基准任务下的有效成功率（VSR）对比分析（与 FFT, LoRA 基准对比）}
+
+\subsection{零样本多重约束组合性能测试}
+
+\subsection{机制探究消融实验（网络深度的影响、残差注入位置的敏感度分析）}
+
+\section{本章小结}
