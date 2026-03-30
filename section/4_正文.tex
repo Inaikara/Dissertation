@@ -1,13 +1,296 @@
 \chapter{基于异构约束观测输入的模仿学习网络}
 
 \section{引言}
+生成式模型已成为机器人学习领域的核心范式之一。基于扩散的运动策略能够利用扩散模型的强大容量，从专家演示中拟合复杂的多峰动作分布。然而，在预训练阶段获得的无约束能力与现实世界部署时的严格约束之间仍然存在关键差距。当机器人在非结构化环境中执行任务时，经常会遇到训练数据中未显式建模的异构约束。这些约束范围广泛，既包括避障和安全操作区域等显式空间限制，也包括速度限制和运动平滑度等隐式动力学要求。虽然生成式策略擅长产生多样化的动作分布，但安全约束通常要求机器人的行为塌缩到狭窄且往往是非凸的动作流形上。如果没有显式的机制来建模这些限制，预训练模型在约束场景下往往表现出脆弱的行为，甚至在遇到分布外场景时发生危险的冲突。
+
+现有的约束遵循方法主要分为反应式滤波、主动引导和参数适配。基于控制屏障函数的反应式方法通过将生成的动作投影到安全集来提供安全保证，但其本质是近视的。在执行层面强制投影动作会破坏扩散生成轨迹的时间连贯性，由于规划流形与安全集之间的不匹配，容易诱发抖动或不稳定性。主动引导方法尝试使用约束分类器的梯度来引导采样过程，但在噪声中间状态上训练准确的分类器面临巨大的优化挑战。参数适配方法中，全参数微调面临灾难性遗忘问题，而低秩适配则缺乏显式调节机制。针对上述问题，本章提出一种名为 ConstrainNet 的模块化残差框架。该框架通过编码约束观测信息，并将残差信号通过跳跃连接注入到冻结的骨干网络中，旨在实现异构约束的即插即用式适配。这种设计不仅能够引导动作生成向满足约束的轨迹收敛，还能够有效地保持预训练模型已有的操作技能。
+
+\begin{figure}[htbp]
+    \centering
+    \subfloat[Diffusion Policy]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.a.pdf}}\\
+    \subfloat[Diffusion Policy + ConstrainNet]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.b.pdf}}
+    \caption{基于残差注入的 ConstrainNet 框架架构图}
+    \label{fig:constrainnet_overview}
+\end{figure}
+
+如图 \ref{fig:constrainnet_overview} 所示，本章提出的框架对比了原始扩散策略与集成 ConstrainNet 后的系统差异。在图 \ref{fig:constrainnet_overview} (a) 中，标准扩散策略仅依据视觉与本体感知输入生成动作轨迹，当环境中出现未建模的障碍物时，生成的蓝色虚线轨迹直接穿过目标，缺乏安全性考量。而在图 \ref{fig:constrainnet_overview} (b) 中，通过引入 ConstrainNet 模块并输入异构约束信息，系统在原始骨干网络的基础上通过残差注入机制，使生成的轨迹产生了明显的避障偏移，最终引导机器人生成一条既符合操作技能又满足空间安全约束的平滑路径。
 
 \section{基于扩散模型的模仿学习策略}
+扩散策略将机器人运动策略学习建模为一个条件去噪扩散过程。其核心思想是通过学习一个去噪网络，将高斯噪声分布逐步转化为符合专家演示分布的动作轨迹。这一过程可以表示为在给定观测信息 $O_{obs}$ 的条件下，生成动作序列 $A$ 的概率分布 $\pi(A|O_{obs})$。在架构上，扩散策略通常采用一维时序 U-Net 卷积神经网络。该网络包含多层编码器块、中间块以及解码器块。为了实现实时闭环控制，系统采用了动作序列预测机制。在每个时间步，策略接收观测序列作为输入，并预测未来 $T_{p}$ 步的动作序列 $A=\{a_{k}\}_{k=1}^{T_{p}}$，其中 $a_{k} \in \mathbb{R}^{D_{a}}$ 代表动作空间维度。
+
+扩散模型通过模拟非平衡热力学过程，在训练阶段向专家动作数据中逐步引入噪声。该正向扩散过程通过预定义的噪声调度逐渐消除动作信号中的结构信息。在推理阶段，策略执行逆向去噪过程，从标准高斯噪声 $A_{T} \in \mathbb{R}^{T_{p} \times D_{a}}$ 开始，经过 $T$ 个去噪步长迭代得到最终的动作轨迹 $A_{0}$。去噪网络 $U_{\theta}$ 负责在每个步骤预测加入的噪声 $\epsilon$。优化过程通过最小化均方误差损失函数 $\mathcal{L}_{DP}=\mathbb{E}_{t,A_{0},O_{obs,\epsilon}}[||\epsilon-U_{\theta}(A_{t},t,O_{obs})||^{2}]$ 来实现。U-Net 架构利用跳跃连接将高频特征从编码器直接传递至同层级的解码器，这为 ConstrainNet 提供了精准的特征注入锚点。
 
 \section{面向异构约束的残差注入架构设计}
+针对现实部署中不断变化的约束需求，ConstrainNet 架构采用了一种基于残差注入的模块化适配机制，其核心灵感来源于可控图像生成的思想，但针对机器人时序动作控制进行了重新设计。该架构由约束编码器、可训练约束分支以及零卷积注入层组成。约束编码器 $E_{\psi}$ 通常由多层感知机实现，负责将异构约束观测 $O_{c}$（如障碍物坐标或目标速度比）映射到动作空间维度。编码器生成的特征通过处理得到特征张量 $C_{feat}=E_{\psi}(O_{c}) \in \mathbb{R}^{T_{p} \times D_{a}}$。这种处理方式确保了空间或动力学约束能够在整个预测时域内对动作生成施加一致的影响。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figure/chapter4/fig4.3.pdf}
+    \caption{基于零卷积与跳跃连接的残差注入网络架构}
+    \label{fig:constrainnet_arch}
+\end{figure}
+
+可训练约束分支 $C_{\phi}$ 在结构上完全复制了骨干网络 $U_{\theta}$ 的编码器块和中间块。如图 \ref{fig:constrainnet_arch} 所示，该分支接收当前噪声动作序列 $A_{t}$ 与约束特征 $C_{feat}$ 的耦合输入 $A_{t}^{add}=A_{t}+C_{feat}$，并结合环境观测特征 $O_{embed}$ 提取特定于约束的语义表征。这种参数复制的初始化方式使约束分支在训练之初就继承了原始策略的特征提取能力，使其能够基于强大的模仿学习先验快速学习约束校正方案。
+
+为了保证系统在训练初期不偏离原始策略，本章在残差注入路径上引入了 $1 \times 1$ 的零卷积层 $Z_{\phi}^{(l)}$。这些层的权重和偏置均初始化为零，使得在训练初期即使约束分支产生了激活信号，最终注入到骨干网络的残差偏移量也严格为零。这种设计确保了系统行为在优化开始时与原始骨干网络完全一致，极大地增强了训练的稳定性。残差信号在解码器的跳跃连接处进行融合，其融合逻辑遵循：$d_{fused}^{(l)}=Concat(d^{(l)}, e^{(l)}+\mathcal{R}^{(l)})$。其中 $e^{(l)}$ 为骨干网络编码器特征，$d^{(l)}$ 为解码器块特征，$\mathcal{R}^{(l)}=Z_{\phi}^{(l)}(c^{(l)})$ 为学习到的特征残差偏移量。通过在高维特征空间施加这种引导偏置，ConstrainNet 能够以主动转向的方式推动生成的动作轨迹向安全流形收敛，而非在输出端进行被动地截断或投影。
 
 \section{零样本多约束组合机制}
+在推理阶段，ConstrainNet 的优越性体现在其强大的模块化组合能力。系统采用基于去噪扩散概率模型（DDPM）的调度器，在每个去噪步骤中并行聚合来自多个独立训练的约束模块的残差校正量。当环境中同时出现空间避障和速度限制等多个独立约束时，系统激活对应的约束模块，通过残差叠加生成总校正信号 $\mathcal{R}_{total}^{(l)}=\sum_{i=1}^{N}\lambda_{i}\mathcal{R}_{i}^{(l)}$。其中 $\lambda_{i}$ 为调节不同约束权重的超参数。算法 1 详细描述了该推断过程。
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l}
+\hline
+算法 1：基于 ConstrainNet 的多约束推断算法 \\ \hline
+输入： 冻结骨干网络 $U_{\theta}$（含编码器 $E_{\theta}$、解码器 $D_{\theta}$）；约束模块集 $\{(C_{\phi_{i}}, Z_{\phi_{i}})\}_{i=1}^{N}$ \\
+输入： 环境观测 $O_{obs}$；异构约束输入集 $\{O_{c,i}\}_{i=1}^{N}$ \\
+输入： 噪声调度参数 $\{\beta_{t}, \alpha_{t}, \bar{\alpha}_{t}\}$；约束调节权重 $\{\lambda_{i}\}_{i=1}^{N}$ \\
+1: 初始化：从高斯分布采样初始动作噪声轨迹 $A_{T} \sim \mathcal{N}(0, \mathbf{I})$ \\
+2: 循环 $t = T$ 递减至 $1$ 执行： \\
+3: \quad 提取当前观测嵌入特征：$O_{embed} \leftarrow StateEncoder(O_{obs})$ \\
+4: \quad 骨干网络编码提取：$\{e^{(l)}\}_{l=1}^{L}, e_{bottle} \leftarrow E_{\theta}(A_{t}, t, O_{embed})$ \\
+5: \quad 重置总残差修正项：$\mathcal{R}^{(bottle)} \leftarrow 0, \{\mathcal{R}^{(l)} \leftarrow 0\}_{l=1}^{L}$ \\
+6: \quad 针对 每个激活的约束模块 $i = 1$ 至 $N$ 循环： \\
+7: \quad \quad 约束观测特征编码：$C_{feat} \leftarrow E_{\psi_{i}}(O_{c,i})$ \\
+8: \quad \quad 计算残差分支耦合输入：$A_{t}^{add} \leftarrow A_{t} + C_{feat}$ \\
+9: \quad \quad 约束分支特征提取：$\{c^{(l)}\}_{l=1}^{L}, c_{bottle} \leftarrow C_{\phi_{i}}(A_{t}^{add}, t, O_{embed})$ \\
+10: \quad \quad 累加中间层残差：$\mathcal{R}^{(bottle)} \leftarrow \mathcal{R}^{(bottle)} + \lambda_{i} Z_{\phi_{i}}^{(bottle)}(c_{bottle})$ \\
+11: \quad \quad 针对 网络层级 $l = 1$ 至 $L$ 循环： \\
+12: \quad \quad \quad 累加跳跃连接残差：$\mathcal{R}^{(l)} \leftarrow \mathcal{R}^{(l)} + \lambda_{i} Z_{\phi_{i}}^{(l)}(c^{(l)})$ \\
+13: \quad \quad 结束内层循环 \\
+14: \quad 结束模块循环 \\
+15: \quad 中间块融合解码：$d \leftarrow D_{\theta}^{(bottle)}(e_{bottle} + \mathcal{R}^{(bottle)})$ \\
+16: \quad 针对 层级 $l = L$ 递减至 $1$ 循环： \\
+17: \quad \quad 融合编码器特征与残差：$e_{fused} \leftarrow e^{(l)} + \mathcal{R}^{(l)}$ \\
+18: \quad \quad 解码器块特征融合：$d \leftarrow D_{\theta}^{(l)}(Concat(d, e_{fused}))$ \\
+19: \quad 结束解码循环 \\
+20: \quad 提取预测噪声：$\epsilon_{pred} \leftarrow d$ \\
+21: \quad 若 $t > 1$ 则 采样噪声 $z \sim \mathcal{N}(0, \mathbf{I})$ 否则 $z \leftarrow 0$ \\
+22: \quad 执行 DDPM 逆步长更新：$A_{t-1} \leftarrow \frac{1}{\sqrt{\alpha_{t}}}(A_{t} - \frac{1-\alpha_{t}}{\sqrt{1-\alpha_{t}}}\epsilon_{pred}) + \sqrt{\beta_{t}}z$ \\
+23: 结束主循环 \\
+24: 返回 最终动作轨迹 $A_{0}$ \\ \hline
+\end{tabular}
+\end{table}
+
+图 \ref{fig:constrainnet_compose} 直观地展示了该组合机制在不同约束配置下的行为表现。在子图 \ref{fig:constrainnet_compose} (a) 中，原始扩散策略在面临未建模的红色圆形障碍物时，生成的动作序列（淡红色虚线）与障碍物发生严重重叠，导致任务失败。子图 \ref{fig:constrainnet_compose} (b) 展示了激活空间约束模块后的效果，机器人生成的轨迹产生了明显的侧向偏移，成功绕过障碍。子图 \ref{fig:constrainnet_compose} (c) 则展示了运动学模块对末端速度的精确控制，相比于 (a) 图，轨迹点分布更加密集，体现了对减速要求的遵循。最后，子图 \ref{fig:constrainnet_compose} (d) 验证了 Dual 配置下的零样本组合能力，系统在无需任何额外联合微调的情况下，通过空间残差与运动学残差的线性叠加，在绕过红色障碍物的同时保持了高密度的慢速步进。这种组合方式的有效性源于不同物理属性的残差信号在特征空间中的解耦性，使得系统能够以“即插即用”的方式应对复杂的多重约束场景。
+\begin{figure}[htbp]
+    \centering
+    \subfloat[Difffusion Policy]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.a.pdf}}\hfill
+    \subfloat[Spatial ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.b.pdf}}\\
+    \subfloat[Kinematic ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.c.pdf}}\hfill
+    \subfloat[Dual ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.d.pdf}}
+    \caption{ConstrainNet的零样本多约束组合机制}
+    \label{fig:constrainnet_compose}
+\end{figure}
+
+该算法通过迭代去噪逐步细化动作轨迹。这种线性叠加机制的有效性源于不同约束模块在特征空间中的正交性，使得残差信号在叠加时不会发生严重的相消干扰，从而保证了复合约束下的任务执行稳定性。
 
 \section{实验对比与分析}
 
+本节通过一系列仿真实验对 ConstrainNet 的性能进行定量评估，并深入分析其内部机制。实验环境主要基于 PushT 仿真任务及其扩展变体。在标准 PushT 环境中，一个圆形代理机器人需要将灰色的 T 形方块推入绿色的目标区域，该环境主要用于评估原始操作技能的保持情况及运动学控制性能。在此基础上，PushT w/ Obstacle 环境通过在起始位置与目标区域之间随机放置红色圆形障碍物，增加了空间避障约束，要求机器人在完成任务的同时严禁触碰障碍。
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.4.jpg}
+    \caption{PushT 和 PushT w/ Obstacle 环境示意图}
+    \label{fig:environments}
+\end{figure}
+
+为了全面衡量系统的约束性能，本研究采用以下三个关键指标：成功率（Success Rate, SR）定义为任务完成（即目标区域被完全覆盖）的回合百分比；违规率（Violation Rate, VR）定义为机器人与障碍物发生碰撞的回合百分比；有效成功率（Valid Success Rate, VSR）则代表既成功完成任务且未发生任何碰撞违规的回合比例。需要说明的是，虽然仿真环境中的碰撞逻辑是非终止性的，即碰撞后实验仍会继续，但任何产生碰撞的轨迹均会被严格记录为违规。基准参数设置如表 \ref{tab:hyperparameters} 所示。
+
+\begin{table}[htbp]
+\centering
+\caption{各实验方法的超参数设置情况}
+\label{tab:hyperparameters}
+\begin{tabular}{ll}
+\hline
+方法 & 参数设置 \\ \hline
+扩散策略 (DP) & 批大小 64, 训练步数 40000, 演示轨迹数 206 \\
+安全滤波器 (DP+CBF) & 障碍物半径 $R=65$, 调节参数 $\alpha=1.5$, 公式为 $h+\alpha h \ge 0$ \\
+全参数微调 (DP+FFT) & 批大小 64, 训练步数 20000, 演示轨迹数 50 \\
+低秩适配 (DP+LoRA) & 批大小 1024, 训练步数 5000, 秩 $rank=8$, 演示轨迹数 50 \\
+ConstrainNet (本项目) & 批大小 1024, 训练步数 5000, 演示轨迹数 50 \\ \hline
+\end{tabular}
+\end{table}
+
+在空间约束有效性实验中，ConstrainNet 与多种基线方法进行了对比。如表 \ref{tab:spatial_performance} 所示，ConstrainNet 在含有障碍物的任务中实现了 90.5\% 的有效成功率，显著高于基于控制屏障函数的方法（DP+CBF）。图 \ref{fig:traj_comparison} 展示了不同方法的轨迹生成效果。实验发现，DP+CBF 在安全边界处表现出被动的反应式特性，导致代理机器人在障碍物边缘产生震荡，甚至无法维持操作动量；相比之下，ConstrainNet 学习到的是一种主动的全局转向场，能够预先规划路径以绕过障碍物，从而保证了路径的相干性与操作任务的连续性。
+
+\begin{table}[htbp]
+\centering
+\caption{各方法在 PushT 与 PushT w/ Obstacle 任务下的性能对比}
+\label{tab:spatial_performance}
+\begin{tabular}{lcccc}
+\hline
+ & PushT & \multicolumn{3}{c}{PushT w/ Obstacle} \\ \cline{2-5} 
+方法 & 成功率 & 成功率 & 违规率 & 有效成功率 \\ \hline
+DP & 95.0\% & 93.5\% & 100.0\% & 0.0\% \\
+DP+CBF & - & 71.0\% & 0.0\% & 71.0\% \\
+DP+FFT & 73.5\% & 74.5\% & 4.5\% & 72.0\% \\
+DP+LoRA & 88.0\% & 90.5\% & 6.0\% & 87.5\% \\
+ConstrainNet & 95.0\% & 91.5\% & 3.5\% & 90.5\% \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.5.pdf}
+    \caption{CBF 反应式滤波方法与 ConstrainNet 主动转向机制的生成轨迹对比}
+    \label{fig:traj_comparison}
+\end{figure}
+
+抗遗忘能力测试进一步验证了模块化残差架构的优越性。表 \ref{tab:spatial_performance} 中的 PushT 列显示，全参数微调方法（FFT）在原始无约束任务中的成功率从 95.0\% 大幅下降至 73.5\%，表现出明显的灾难性遗忘。这是因为 FFT 在微调过程中破坏了预训练阶段习得的操作先验。相比之下，ConstrainNet 保持主干网络冻结，当环境中无约束输入时，系统不产生残差信号，从而完全恢复原始模型的行为，其成功率保持在 95.0\%。此外，图 \ref{fig:data_efficiency} 的实验结果表明，在仅有少量演示数据（如 10 条轨迹）时，ConstrainNet 的 VSR 仍显著领先于 FFT 和 LoRA，证明了学习残差场比重新适配整个策略分布具有更高的数据效率。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.6.pdf}
+    \caption{在不同数量演示轨迹支持下的有效成功率（VSR）性能对比}
+    \label{fig:data_efficiency}
+\end{figure}
+
+针对运动学约束的泛化性测试结果如表 \ref{tab:kinematic_results} 所示。实验通过训练速度控制模块，在推断阶段向网络输入目标速度比 $r$。结果表明，代理机器人的平均速度随着设定比例的降低而线性减小。当 $r=0.5$ 时，速度控制在 $5.86 \pm 1.29$；当 $r=0.25$ 时，速度进一步降至 $3.57 \pm 0.51$，且任务成功率始终维持在极高水平。这证明了所提出的框架能够有效处理异构的非几何约束。
+
+\begin{table}[htbp]
+\centering
+\caption{PushT 任务中的运动学速度控制量化结果}
+\label{tab:kinematic_results}
+\begin{tabular}{lcc}
+\hline
+方法 & 成功率 (SR) & 平均速度 \\ \hline
+DP & 95.0\% & $10.66 \pm 0.62$ \\
+ConstrainNet ($r=0.5$) & 91.5\% & $5.86 \pm 1.29$ \\
+ConstrainNet ($r=0.25$) & 90.0\% & $3.57 \pm 0.51$ \\ \hline
+\end{tabular}
+\end{table}
+
+本章随后通过将独立训练的空间与运动学模块直接组合，评估了系统的零样本组合性能。如表 \ref{tab:zero_shot_composition} 所示，在 Dual 配置下，系统在没有任何联合微调的情况下，同时实现了高有效成功率（89.0\%）和精确的速度控制（$5.89 \pm 1.64$）。这一结果依赖于不同物理属性的残差信号在特征空间中的解耦性。
+
+\begin{table}[htbp]
+\centering
+\caption{PushT w/ Obstacle 环境下的零样本多约束组合性能}
+\label{tab:zero_shot_composition}
+\begin{tabular}{lcc}
+\hline
+配置方案 & 有效成功率 (VSR) & 平均速度 \\ \hline
+ConstrainNet (仅空间模块激活) & 90.5\% & $10.40 \pm 0.60$ \\
+ConstrainNet (仅运动学模块激活) & 0.0\% & $5.82 \pm 1.08$ \\
+ConstrainNet (Dual 双模块组合) & 89.0\% & $5.89 \pm 1.64$ \\ \hline
+\end{tabular}
+\end{table}
+
+在机器人闭环控制系统中，推理延迟是衡量算法实用性的核心指标之一。表 \ref{tab:computational_overhead} 详尽地列出了在不同采样策略及约束配置下的计算开销分析。实验结果表明，原始扩散策略在采用去噪扩散概率模型（DDPM）采样时，单次推理耗时约为 $231.56 \pm 7.09$ 毫秒。引入空间或运动学约束模块后，由于残差分支需要进行额外的特征提取，推理延迟分别增加了约 136 毫秒和 128 毫秒。在双约束组合模式下，总耗时进一步上升。然而，通过引入去噪扩散隐式模型（DDIM）加速采样策略，系统在保持生成质量的同时显著压缩了计算耗时。在 Dual 组合配置下，推理延迟从 DDPM 的四百余毫秒大幅缩减至 $79.54 \pm 8.84$ 毫秒，实现了约 6.7 Hz 的控制频率。这一优化结果证实了所提出的残差注入架构在增加极小计算负担的前提下，能够满足复杂环境下机器人实时避障与控制的任务需求。
+
+\begin{table}[htbp]
+\centering
+\caption{不同采样策略与约束配置下的计算开销分析}
+\label{tab:computational_overhead}
+\begin{tabular}{lcc}
+\hline
+配置方案 & DDPM 采样耗时 (ms) & DDIM 采样耗时 (ms) \\ \hline
+扩散策略 (DP) & $231.56 \pm 7.09$ & $69.47 \pm 2.13$ \\
++ 空间约束模块 & $+136.41 \pm 20.76$ & $+40.92 \pm 6.23$ \\
++ 运动学约束模块 & $+128.73 \pm 17.92$ & $+38.62 \pm 5.38$ \\
++ Dual 组合 & $+265.26 \pm 29.48$ & $+79.54 \pm 8.84$ \\ \hline
+\end{tabular}
+\end{table}
+
+为了验证 ConstrainNet 学习到的表征是否真正捕捉到了环境中的物理约束信息，本研究进行了基于线性探测的特征相关性实验。图 \ref{fig:linear_probing} 展示了利用解码器不同层级的残差特征预测机器人与障碍物之间物理距离的回归精度（$R^{2}$ 评分）。实验结果显示，空间约束模块在解码器第二层（Decoder 2）提取的特征表现出极强的线性相关性，其 $R^{2}$ 分数达到 0.826。相比之下，冻结的骨干网络（U-Net Encoder）在相同层级的预测精度仅为 0.114。这一显著差异有力地证明了端到端训练范式并未陷入简单的模式记忆，而是成功在特征空间中显式地重构了避障所需的几何特征。这种具备物理内涵的语义表征是系统实现主动避障而非被动滤波的理论基础。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.13.pdf}
+    \caption{利用解码器残差特征预测物理距离的线性回归精度分析}
+    \label{fig:linear_probing}
+\end{figure}
+
+残差信号的动态响应特性直接决定了机器人在执行任务时的安全性。图 \ref{fig:temporal_signal} 刻画了在一个典型任务回合中，空间残差信号强度随时间步的演化轨迹。可以观察到，当机器人进入预设的“高风险区域”并接近障碍物时，解码器的残差信号强度（$L_{2}$ 范数）迅速攀升。随着机器人成功绕过障碍并进入安全开阔区域，信号强度随之逐渐衰减并趋于稳定。这种随避障风险动态调整的特性表明 ConstrainNet 具备高度的自适应激活能力，能够根据当前观测状态精确调节修正量的大小，在确保避障安全性的同时最大限度地保留预训练模型的原始操作技能。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.14.jpeg}
+    \caption{典型回合中空间残差信号强度的时序演化特征}
+    \label{fig:temporal_signal}
+\end{figure}
+
+在网络架构设计层面，约束编码器的深度对模型性能具有显著影响。图 \ref{fig:ab_depth} 展示了不同 MLP 层数配置下的训练性能对比。实验发现，单层编码器由于非线性表达能力不足，在任务成功率和违规率指标上表现受限；而当层数增加至 4 层或 5 层时，模型出现了明显的过拟合现象，导致验证集性能下降。综合考量特征提取能力与泛化性能，本研究最终选用 2 层 MLP 作为约束编码器的标准配置。图 \ref{fig:ab_depth} 中的成功率与有效成功率曲线共同证实了 2 层结构在拟合效率与模型鲁棒性之间达到了最优平衡。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.7.pdf}
+    \caption{约束编码器 MLP 层数对模型训练性能的影响}
+    \label{fig:ab_depth}
+\end{figure}
+
+权重初始化策略是确保残差注入网络稳定训练的关键。图 \ref{fig:ab_init} 对比了四种不同的初始化组合。实验结果表明，采用“零卷积初始化”结合“复制骨干网络权重”的策略在收敛速度和最终性能上均处于领先地位。零卷积能够确保在训练初期残差信号为零，防止由于随机初始化的残差信号对冻结的骨干网络造成剧烈冲击；而复制编码器权重则为模型提供了强大的底层特征提取先验。图 \ref{fig:ab_init} 中的违规率下降曲线清晰地展示了该组合策略在抑制不安全行为方面的卓越有效性。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.8.pdf}
+    \caption{不同权重初始化策略对残差注入稳定性的对比分析}
+    \label{fig:ab_init}
+\end{figure}
+
+针对机器人学习中常见的专家数据获取成本高的问题，本研究评估了模型在小样本场景下的训练表现。图 \ref{fig:ab_stability} 展示了在仅提供 10 条专家演示轨迹的情况下，使用 6 个不同随机种子进行训练的成功率曲线。实验观察到，尽管数据量极度受限，ConstrainNet 的训练动态依然保持高度稳定，并未出现严重的性能震荡。这得益于残差学习范式降低了优化的复杂度，使得模型能够从小样本中高效提取约束遵循的关键规律。这一特性极大地提升了系统在实际部署中的可落地性。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.9.pdf}
+    \caption{基于少量样本演示数据的训练收敛稳定性验证}
+    \label{fig:ab_stability}
+\end{figure}
+
+为了深入剖析约束信息在解码器中的流转过程，本节首先进行了注入位置的消融实验。图 \ref{fig:ab_injection} 的定量评估结果揭示了不同层级的贡献度差异。实验发现，移除解码器第一层（Decoder 1）的残差信号对总体的有效成功率几乎没有影响，性能损失仅为 0.2\%。然而，一旦移除解码器第二层或第三层的注入信号，系统的避障能力将丧失 66\% 以上。这一现象表明，ConstrainNet 的约束语义主要在网络的中后段进行融合，底层网络更多地承担了通用特征的基础处理，而非特定约束的动作修正。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter4/fig4.10.pdf}
+    \caption{基于解码器层级的残差注入位置消融实验结果}
+    \label{fig:ab_injection}
+\end{figure}
+
+通过 t-SNE 与 UMAP 技术对解码器各层特征进行可视化分析，可以直观地观察到表征解耦的演化过程。如图 \ref{fig:feature_space_vis} 所示，在解码器第一层中，空间约束特征与骨干网络的 U-Net 特征在流形空间中表现出极高的重叠度，特征分化不明显。随着网络深度的增加，在第二层和第三层中，不同类型的约束特征逐渐分化并占据了相互分离的聚类区域。这种特征表征的逐渐正交化是零样本多约束组合机制能够成功的物理基础。实验结果暗示，多模块组合的有效性与表征空间的分离度呈高度正相关。
+
+\begin{figure}[htbp]
+    \centering
+    \subfloat[D1 (t-SNE)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.a.pdf}}\hfill
+    \subfloat[D2 (t-SNE)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.b.pdf}}\hfill
+    \subfloat[D3 (t-SNE)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.c.pdf}}\\
+    \subfloat[D1 (UMAP)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.d.pdf}}\hfill
+    \subfloat[D2 (UMAP)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.e.pdf}}\hfill
+    \subfloat[D3 (UMAP)]{\includegraphics[width=0.33\textwidth]{figure/chapter4/fig4.12.f.pdf}}
+    \caption{各解码器层特征表示的解耦性可视化分析（t-SNE 与 UMAP）}
+    \label{fig:feature_space_vis}
+\end{figure}
+
+为了深入探究多约束组合失效的内在物理机理，并定量验证表征重叠与任务失败之间的因果关系，本研究针对特征空间中的向量共线性进行了系统性分析。通过提取解码器不同层级的中间特征，分别计算了成功回合与失败案例下的特征对余弦相似度。成功回合下的量化分析如表 \ref{tab:cosine_similarity_success} 所示，实验结果表明，在深层网络（如解码器第 2 层与第 3 层）中，骨干网络 $U_{\theta}$、空间约束模块与运动学约束模块所产生的特征向量之间的余弦相似度均趋近于零。这种近乎正交的关系意味着不同物理属性的残差信号在特征空间中占据了互不干扰的子空间，从而保证了通过线性叠加生成的总校正信号 $\mathcal{R}_{total}^{(l)}$ 能够同时满足多重约束需求，而不破坏原始的操作技能。
+
+\begin{table}[htbp]
+\centering
+\caption{成功回合下不同解码器层级的特征对余弦相似度量化分析}
+\label{tab:cosine_similarity_success}
+\begin{tabular}{lccc}
+\hline
+特征对 & 解码器层 1 & 解码器层 2 & 解码器层 3 \\ \hline
+UNet vs 空间模块 & $0.97 \pm 0.03$ & $0.00 \pm 0.09$ & $-0.20 \pm 0.09$ \\
+UNet vs 运动学模块 & $0.32 \pm 0.22$ & $0.01 \pm 0.03$ & $0.34 \pm 0.13$ \\
+空间模块 vs 运动学模块 & $0.20 \pm 0.13$ & $0.17 \pm 0.08$ & $0.05 \pm 0.08$ \\ \hline
+\end{tabular}
+\end{table}
+
+然而，在失败案例的量化对比分析（见表 \ref{tab:cosine_similarity_failure}）中观察到了显著的特征耦合现象。特别是在解码器第 2 层，空间模块与运动学模块之间的余弦相似度显著上升至 $0.61 \pm 0.24$。从几何角度解释，高余弦相似度意味着两个约束模块生成的残差向量在特征空间中的指向发生了严重的重合或冲突。在这种情况下，旨在减速的运动学修正信号可能会在方向上抵消部分避障转向信号，导致合成的轨迹偏离安全流形。这种表征空间的塌陷是导致机器人在复杂 Dual 配置下发生碰撞的主要诱因，说明线性叠加机制的有效性高度依赖于特征分布的正交性。
+
+\begin{table}[htbp]
+\centering
+\caption{失败案例下不同解码器层级的特征对余弦相似度对比分析}
+\label{tab:cosine_similarity_failure}
+\begin{tabular}{lccc}
+\hline
+特征对 & 解码器层 1 & 解码器层 2 & 解码器层 3 \\ \hline
+UNet vs 空间模块 & $0.95 \pm 0.04$ & $0.15 \pm 0.11$ & $-0.02 \pm 0.08$ \\
+运动学模块 vs UNet & $0.73 \pm 0.18$ & $0.10 \pm 0.12$ & $0.48 \pm 0.16$ \\
+运动学模块 vs 空间模块 & $0.62 \pm 0.21$ & $0.61 \pm 0.24$ & $0.11 \pm 0.12$ \\ \hline
+\end{tabular}
+\end{table}
+
+基于上述发现，本研究提出并引入了一项安全重采样机制，以提升系统在推理阶段处理多约束冲突的鲁棒性。该机制的核心逻辑在于利用残差表征的解耦程度作为预测任务风险的指标。在执行去噪迭代的过程中，系统实时监测不同激活模块在关键解码层级（即 Decoder 2）生成的残差特征向量 $\mathcal{R}_{i}^{(l)}$ 与 $\mathcal{R}_{j}^{(l)}$ 之间的余弦相似度 $S_{cos}$。其判定准则定义为：若 $S_{cos} = \frac{\mathcal{R}_{i}^{(l)} \cdot \mathcal{R}_{j}^{(l)}}{\|\mathcal{R}_{i}^{(l)}\| \|\mathcal{R}_{j}^{(l)}\|}$ 超过预设的安全性阈值 (0.5)，则判定当前生成的噪声预测路径存在潜在的多约束干扰风险。
+当检测到表征重合度过高时，系统将触发预防性的重采样操作。具体而言，该机制会立即舍弃当前存在风险的动作轨迹采样，并利用去噪扩散过程中的概率多样性，通过更换随机种子重新采样初始高斯噪声轨迹 $A_{T}$。通过在迭代初期识别并规避特征空间中的冲突状态，该方法能够引导采样过程进入更具正交性的特征子空间，从而有效降低由于残差信号相互抵消导致的碰撞风险。实验结果证明，引入安全重采样机制后，系统在极端环境下的有效成功率得到了进一步提升，确保了在复杂多约束任务中机器人行为的一致性与安全性。
+
 \section{本章小结}
+本章提出并验证了基于残差注入的模块化框架 ConstrainNet，旨在解决机器人模仿学习策略在复杂异构约束环境下的泛化难题。通过在 PushT 仿真环境及其变体中进行的大量对比实验，论证了该架构在保持预训练技能的同时，能够高效满足空间避障与运动学控制要求。实验数据表明，ConstrainNet 在有效成功率、数据利用率以及多约束零样本组合能力上均优于现有的安全滤波及权重微调方法。特征空间可视化与线性探测进一步揭示了残差信号的解耦机制与物理内涵。该研究为机器人策略在非稳态环境下的安全部署提供了稳健的技术支撑。
