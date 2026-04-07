@@ -33,3 +33,5 @@
 *.pptx
 
 .DS_Store
+/assets/
+/figure/
