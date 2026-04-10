@@ -1,13 +1,159 @@
 \chapter{预备知识}
 
-\section{机器人学基础}
+\section{机器人运动学}
+
+为了实现机械臂在三维空间中的精确作业，必须建立描述其连杆几何关系与关节运动规律的数学模型。
+
+在机器人运动学建模中，改进型 Denavit-Hartenberg (D-H) 参数法由于其坐标系建立在连杆的近端，能够有效避免在处理分支机构或闭环链时的歧义，因此被广泛采用。如图 \ref{fig:dh_notation} 所示，通过在每个关节处建立局部坐标系，可以将复杂的连杆几何特征简化为四个关键参数：连杆长度 $a_{i-1}$、连杆偏置 $d_{i}$、连杆转角 $\alpha_{i-1}$ 以及关节角 $\theta_{i}$。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter2/fig2.1.png}
+    \caption{改进型 D-H 参数坐标系定义示意图}
+    \label{fig:dh_notation}
+\end{figure}
+
+对于任意相邻的两个连杆坐标系 $\{i-1\}$ 和 $\{i\}$，其间的变换矩阵 $^{i-1}_{i}T$ 可表示为：
+\begin{equation}
+^{i-1}_{i}T = \begin{bmatrix} 
+\cos\theta_{i} & -\sin\theta_{i} & 0 & a_{i-1} \\
+\sin\theta_{i}\cos\alpha_{i-1} & \cos\theta_{i}\cos\alpha_{i-1} & -\sin\alpha_{i-1} & -d_{i}\sin\alpha_{i-1} \\
+\sin\theta_{i}\sin\alpha_{i-1} & \cos\theta_{i}\sin\alpha_{i-1} & \cos\alpha_{i-1} & d_{i}\cos\alpha_{i-1} \\
+0 & 0 & 0 & 1 
+\end{bmatrix}
+\end{equation}
+其中，$^{i-1}_{i}T$ 是从坐标系 $\{i\}$ 到坐标系 $\{i-1\}$ 的齐次变换矩阵。正运动学的任务即是通过给定关节向量 $\boldsymbol{q} = [\theta_{1}, \theta_{2}, \dots, \theta_{n}]^{T}$，将各连杆间的变换矩阵进行连乘，最终获得机器人末端执行器相对于基坐标系的位姿矩阵 $^{0}_{n}T$。其物理意义在于确定执行器在笛卡尔空间中的确切位置与姿态。
+
+相较于正运动学，逆运动学则是求解从目标位姿 $^{0}_{n}T$ 到关节空间向量 $\boldsymbol{q}$ 的映射。这是机器人路径规划与实时控制的前提。由于机器人结构的冗余性，逆运动学求解通常涉及非线性方程组的解算，可能存在多组解、唯一解或无解的情况。本研究针对不同构型的实验平台，分别采用了封闭解法与基于雅可比矩阵的数值迭代法，以确保运动求解的实时性与准确性。
+
+为了验证所提算法的通用性与稳健性，本文采用了三种具有代表性的机器人硬件平台进行实验研究。如图 \ref{fig:robot_platforms} 所示，各平台在自由度、传感器配置以及作业形态上均存在显著差异。
+
+\begin{figure}[htbp]
+    \centering
+    \subfloat[EC66]{\includegraphics[height=0.35\textwidth]{figure/chapter2/fig2.2a.png}}
+    \subfloat[R1 Pro]{\includegraphics[height=0.35\textwidth]{figure/chapter2/fig2.2b.png}}
+    \subfloat[R1 Lite]{\includegraphics[height=0.35\textwidth]{figure/chapter2/fig2.2c.png}}
+    \caption{本研究所采用的三种机器人平台}
+    \label{fig:robot_platforms}
+\end{figure}
+
+艾利特 EC66 协作机械臂是由艾利特机器人有限公司研发的一款六轴工业协作机械臂。该平台具有标准的六自由度结构，负载与自重比优越，能够提供稳定且高重复精度的末端运动。
+
+星海图 R1 Pro 机器人是由星海图人工智能科技有限公司研发的高性能人形机器人。该平台在双臂部分各拥有 7 个自由度，形成了冗余运动空间，能够模拟人类手臂更复杂的避障与操作动作。在感知层面，该机器人集成了 7 个高清相机以及 1 个激光雷达，为其提供了丰富的多模态视觉与深度感知数据，是研究具身智能算法在复杂环境下应用的重要载体。
+
+星海图 R1 Lite 机器人同样是由星海图公司研发的基于 Aloha 构型的机器人。该机器人双臂各具备 6 个自由度，在结构上更加紧凑。传感器配置方面，该平台配备了一对腕部相机用于捕捉操作局部的细节，并搭载一个头部相机提供全局视野。其构型特点使其在模仿学习与远程操作任务中表现出极佳的灵活性。
 
 \section{高斯混合回归}
 
+高斯混合回归是一种建立在高斯混合模型基础上的概率回归算法。与传统的基于确定性方程拟合的回归方法不同，高斯混合回归从概率分布的视角对样本进行建模与推断，能够有效地处理难以用解析方程精确描述的复杂数据分布。该算法具备极高的灵活性，能够根据实际需求任意指定输入与输出的维度。对于一个 $d$ 维的数据集，在利用高斯混合模型完成联合概率密度建模后，可以指定其中的 $i$ 个维度作为输入量 $x_{i}$，剩余的 $o$ 个维度作为输出量 $x_{o}$，两者维数之和满足 $i+o=d$。
+
+高斯混合回归的数学基础在于多元高斯分布的条件概率特性。若随机向量 $[X_{1}, X_{2}]^{T}$ 服从联合高斯分布 $N(\mu, \Sigma)$，其中 $X_{1} \in \mathbb{R}^{p}$，$X_{2} \in \mathbb{R}^{q}$，协方差矩阵 $\Sigma$ 可表示为分块矩阵：
+\begin{equation}
+\Sigma = \begin{bmatrix} \Sigma_{11} & \Sigma_{12} \\ \Sigma_{21} & \Sigma_{22} \end{bmatrix}
+\end{equation}
+在此条件下，已知 $X_{1}$ 时 $X_{2}$ 的条件概率分布依然服从高斯分布，即 $X_{2}|X_{1} \sim N(\mu_{2} + \Sigma_{21}\Sigma_{11}^{-1}(X_{1} - \mu_{1}), \Sigma_{22} - \Sigma_{21}\Sigma_{11}^{-1}\Sigma_{12})$。这表明对于单高斯模型而言，其条件概率分布的均值是关于输入变量的线性方程。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter2/fig2.3cn.png}
+    \caption{高斯混合模型与高斯混合回归}
+    \label{fig:gmm_gmr_demo}
+\end{figure}
+
+如图\ref{fig:gmm_gmr_demo}所示，在高斯混合模型框架下，联合概率密度函数可以看作是 $K$ 个单高斯成分的线性叠加。为了推导高斯混合回归方程，首先将第 $t$ 个高斯成分的均值向量 $\mu_{t}$ 与协方差矩阵 $\Sigma_{t}$ 按照输入维度 $i$ 和输出维度 $o$ 进行分块：
+\begin{equation}
+\mu_{t} = \begin{bmatrix} \mu_{ti} \\ \mu_{to} \end{bmatrix}, \Sigma_{t} = \begin{bmatrix} \Sigma_{tii} & \Sigma_{tio} \\ \Sigma_{toi} & \Sigma_{too} \end{bmatrix}
+\end{equation}
+其中 $\mu_{ti}$ 和 $\mu_{to}$ 分别代表第 $t$ 个成分在输入空间和输出空间的均值向量；$\Sigma_{tii}$ 与 $\Sigma_{too}$ 分别是输入与输出空间的自协方差矩阵，而 $\Sigma_{tio}$ 与 $\Sigma_{toi}$ 则代表输入与输出空间之间的互协方差矩阵。
+
+基于多元高斯分布的性质，在给定输入 $x_{i}$ 的条件下，第 $t$ 个高斯成分对应的条件概率分布均值 $\mu_{t}(x_{i})$ 和方差 $\sigma_{t}^{2}$ 分别计算如下：
+\begin{equation}
+\mu_{t}(x_{i}) = \mu_{to} + \Sigma_{toi}\Sigma_{tii}^{-1}(x_{i} - \mu_{ti})
+\end{equation}
+\begin{equation}
+\sigma_{t}^{2} = \Sigma_{too} - \Sigma_{toi}\Sigma_{tii}^{-1}\Sigma_{tio}
+\end{equation}
+在整个高斯混合模型中，已知输入 $x_{i}$ 时输出 $x_{o}$ 的条件概率分布可以表示为各成分条件概率分布的加权叠加。各成分的权重 $w_{t}(x_{i})$ 取决于输入变量 $x_{i}$ 在该成分边缘分布中的概率密度，其计算公式为：
+\begin{equation}
+w_{t}(x_{i}) = \frac{\alpha_{t}G(x_{i}|\mu_{t}(x_{i}), \Sigma_{tii})}{\sum_{k=1}^{K}\alpha_{k}G(x_{i}|\mu_{k}(x_{i}), \Sigma_{kii})}
+\end{equation}
+式中 $\alpha_{t}$ 为第 $t$ 个高斯成分的权重系数。最终，高斯混合回归通过求取条件概率分布的期望值来生成预测轨迹，其回归方程 $\mathcal{F}_{gmr}(x_{i})$ 为：
+\begin{equation}
+\mathcal{F}_{gmr}(x_{i}) = E(x_{o}|x_{i}) = \sum_{t=1}^{K}w_{t}(x_{i})\mu_{t}(x_{i})
+\end{equation}
+
+高斯混合回归能够根据训练得到的联合分布参数，在复杂的点云数据中提取出最优的连续运动轨迹。在机器人书法任务中，这一机制允许系统在 XY 平面上根据提取的汉字笔画点云生成平滑的参考路径。通过将时间信息作为输入维度，坐标信息作为输出维度，高斯混合回归能够有效地将静态的图像信息转化为具备时序特征的机器人运动指令，从而为后续的动态运动原语学习提供高质量的示范轨迹。
+
 \section{动态运动原语}
+
+动态运动原语是一种基于动态系统的轨迹生成模型，其核心思想是利用数学动力学方程来编码和复现复杂的运动技能。该模型由一个二阶动态系统与一个非线性强迫项共同构成，能够以较少的参数描述复杂的空间轨迹，并具备良好的泛化性能。当任务需求发生变化，例如需要修改运动轨迹的起点或终点时，动态运动原语可以在保证收敛至目标点的同时，最大限度地保留原始轨迹的运动特征，如图\ref{fig:dmp_generalization}所示。
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figure/chapter2/fig2.4.png}
+    \caption{动态运动原语}
+    \label{fig:dmp_generalization}
+\end{figure}
+
+在动态运动原语模型中，系统的演化过程可以描述为如下形式的二阶微分方程：
+\begin{equation}
+\dot{v} = \alpha ( \beta ( g - y ) - v ) + f
+\end{equation}
+其中，$y$ 代表系统当前的状态变量，例如机械臂末端在某一维度上的坐标；$v$ 为系统速度；$g$ 为吸引子，即运动预期的终点目标；$\alpha$ 和 $\beta$ 为增益系数。为了能够灵活调节轨迹的执行速度，通常在速度变量前引入时间放缩因子 $\tau$，从而得到改进后的动力学方程：
+\begin{equation}
+\tau \dot{v} = \alpha ( \beta ( g - y ) - v ) + f
+\end{equation}
+公式中的第一项构成了一个线性弹簧阻尼系统，其物理意义在于为系统提供指向目标点 $g$ 的向心力。为了确保系统在演化过程中不产生超调现象，并能够稳定地收敛至吸引子，通常将参数设置为临界阻尼状态，即满足 $\beta = \alpha / 4$。
+
+为了解除非线性项对绝对时间的依赖，动态运动原语引入了一个正则系统 $x(t)$ 来驱动整个动态过程。正则系统的演化遵循如下方程：
+\begin{equation}
+\tau \dot{x} = - \kappa x
+\end{equation}
+其中 $\kappa$ 为常数。正则系统变量 $x$ 的引入使得非线性项可以通过相位变量而非直接的时间变量进行索引，增强了系统对时间扰动的鲁棒性。非线性函数 $f$ 是控制轨迹形状的关键，它决定了系统从起点到终点之间的运动细节。非线性函数 $f(x)$ 通常通过径向基函数的加权组合来表示：
+\begin{equation}
+f(x) = \frac{\sum_{i=1}^{N} \Psi_{i}(x) w_{i}}{\sum_{i=1}^{N} \Psi_{i}(x)} x(t) ( g - y_{0} )
+\end{equation}
+在上述表达式中，$\Psi_{i}(x)$ 为径向基函数，其数学形式定义如下：
+\begin{equation}
+\Psi_{i}(x) = \exp ( - \frac{(x - \mu_{i})^{2}}{2 \sigma_{i}^{2}} )
+\end{equation}
+其中，$N$ 代表所使用的基函数总数；$\mu_{i}$ 与 $\sigma_{i}$ 分别代表第 $i$ 个基函数的中心位置与宽度参数，这些参数通常根据基函数在时域内均匀分布的原则进行预设。权重参数 $w_{i}$ 则承载了具体的运动技能信息，需要通过对示教轨迹的学习获得。
 
 \section{扩散模型}
 
-\section{语音降噪}
+扩散模型是一类基于非平衡热力学的深度生成模型，其基本原理是通过定义一个马尔可夫链，将数据分布逐渐转化为简单的高斯分布，并学习该过程的逆变换以实现从随机噪声中恢复原始数据。在机器人学与计算机视觉领域，该模型凭借其强大的分布拟合能力和生成样本的高保真度，被广泛应用于轨迹预测、视觉表征学习以及复杂策略的建模。扩散模型主要由前向扩散过程与反向去噪过程两个部分组成。
+
+前向扩散过程是一个向原始数据逐渐注入噪声的过程。给定来自真实数据分布的样本 $\mathbf{x}_0$，前向过程通过 $T$ 个时间步的迭代，将样本逐步转化为各向同性的高斯噪声。在每一个时间步 $t$ 中，噪声注入的转换逻辑由条件概率分布 $q(\mathbf{x}_t | \mathbf{x}_{t-1})$ 描述，其数学表达式为：
+$$q(\mathbf{x}_t | \mathbf{x}_{t-1}) = \mathcal{N}(\mathbf{x}_t; \sqrt{1 - \beta_t} \mathbf{x}_{t-1}, \beta_t \mathbf{I})$$
+在该公式中，$\beta_t$ 表示预先定义的方差调度参数，其取值通常随时间步 $t$ 的增加而增大。$\mathbf{I}$ 代表单位矩阵。该公式背后的物理意义在于，每一时刻的状态 $\mathbf{x}_t$ 都是在前一时刻状态 $\mathbf{x}_{t-1}$ 的基础上进行均值缩放并叠加载荷方差的高斯噪声。随着扩散步数 $T$ 趋于无穷，最终状态 $\mathbf{x}_T$ 将完全丧失原始数据的结构信息，在分布上等价于标准高斯分布。
+
+反向去噪过程则是扩散模型的生成核心，其目的是学习前向扩散过程的逆映射。由于真实的反向转换分布 $q(\mathbf{x}_{t-1} | \mathbf{x}_t)$ 涉及全数据分布的积分，在计算上是不可行的，因此需要通过神经网络构建一个参数化分布 $p_\theta(\mathbf{x}_{t-1} | \mathbf{x}_t)$ 进行近似。反向过程同样被定义为一个马尔可夫链，其起始点为从标准高斯分布中随机采样的噪声。单个反向步的分布通常假设为高斯分布：
+$$p_\theta(\mathbf{x}_{t-1} | \mathbf{x}_t) = \mathcal{N}(\mathbf{x}_{t-1}; \boldsymbol{\mu}_\theta(\mathbf{x}_t, t), \boldsymbol{\Sigma}_\theta(\mathbf{x}_t, t))$$
+其中，$\boldsymbol{\mu}_\theta(\mathbf{x}_t, t)$ 和 $\boldsymbol{\Sigma}_\theta(\mathbf{x}_t, t)$ 分别是由神经网络预测的均值和方差。模型训练的目标是最小化变分上限，使得预测的分布尽可能贴近真实的反向分布。通过多步迭代去噪，模型能够从纯噪声状态引导数据演化，最终生成符合真实分布的高质量样本。
+
+图 2.5 详细展示了扩散模型中状态演化与过程方向的对应关系。在图中，节点 $\mathbf{x}_T$ 代表完全被噪声覆盖的初始状态，而 $\mathbf{x}_0$ 则代表生成的清晰目标图像。实线箭头描绘了从左至右的反向去噪轨迹，对应于生成概率 $p_\theta(\mathbf{x}_{t-1} | \mathbf{x}_t)$，展现了图像从杂乱无章的随机像素逐渐凝聚为具有明确语义的人脸特征的过程。与之相反，图中下方的虚线箭头表示从右至左的前向扩散路径 $q(\mathbf{x}_t | \mathbf{x}_{t-1})$，揭示了清晰图像如何随着扩散步长的演进而逐渐被高斯噪声淹没。这种对称的架构设计为模型提供了严谨的数学基础，使其能够准确地建模复杂的连续数据分布，并为机器人模仿学习中的多模态动作分布表征奠定了基础。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter2/fig2.5.png}
+    \caption{扩散模型的前向扩散与反向生成过程机制示意图}
+    \label{fig:diffusion_mechanism}
+\end{figure}
 
 \section{视觉-语言-动作模型}
+
+视觉-语言-动作模型作为一种端到端具身智能架构，其通过融合多模态感知信息与自然语言指令，实现对机器人动作序列的直接控制。由 NVIDIA 开发的 GR00T N1 模型是该领域的代表性基础模型，其采用了参考人类认知过程设计的双系统组合架构。该架构的设计目标是在处理广泛的泛化任务时，能够同时满足高层逻辑推理与底层高频运动控制的需求，本研究的相关工作均以此架构为基础展开。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/chapter2/fig2.6.png}
+    \caption{GR00T N1 视觉-语言-动作模型架构}
+    \label{fig:groot_architecture}
+\end{figure}
+
+如图 \ref{fig:groot_architecture} 所示，模型架构由负责环境解读的推理模块与执行运动生成的动作模块紧密耦合而成。推理模块采用预训练的视觉-语言模型 Eagle-2 作为骨干网络，运行频率设定为 10Hz。该模块将分辨率为 $224 \times 224$ 的图像观测通过像素重组与视觉编码器提取特征，并与文本指令共同输入大语言模型，提取第 12 层的中间层嵌入表示作为视觉-语言特征向量。此特征向量为底层动作模块提供了必要的任务语义先验。
+
+动作模块基于扩散变换器架构，通过流匹配机制生成闭环电机动作。系统利用具身特定编码器将机器人的本体感知状态 $q_{t}$ 投影至共享嵌入空间。该模块接收长度为 $H=16$ 的加噪动作块 $A_{t}$，并通过交替的自注意力与交叉注意力层，将推理模块输出的特征嵌入整合进动作预测过程。
+
+模型的优化目标以动作流匹配为核心。通过线性插值定义加噪动作块 $A_{t}^{\tau} = \tau A_{t} + (1 - \tau) \epsilon$，其中 $A_{t}$ 为真实动作序列，$\epsilon \sim \mathcal{N}(0, I)$ 为采样噪声，$\tau \in [0, 1]$ 为流匹配时间步。模型通过最小化流匹配损失函数 $\mathcal{L}_{fm}$ 学习近似去噪向量场 $\epsilon - A_{t}$：
+$$\mathcal{L}_{fm}(\theta) = \mathbb{E}_{\tau} [ || V_{\theta}(\phi_{t}, A_{t}^{\tau}, q_{t}) - (\epsilon - A_{t}) ||^{2} ]$$
+公式中 $V_{\theta}$ 代表模型参数，$\phi_{t}$ 为视觉-语言特征嵌入。此外，架构中引入了辅助对象检测损失 $L_{det}$ 以增强空间理解，通过预测指令相关物体的边界框中心坐标 $x_{gt}$ 与预测值 $x_{pred}$ 间的平方误差进行优化。总优化目标设定为 $\mathcal{L} = \mathcal{L}_{fm} + \mathcal{L}_{det}$。GR00T N1 模型总参数量为 2.2B，通过在由真实轨迹、人类视频及仿真数据构成的异构数据金字塔上进行训练，实现了跨机器人实体的通用化操作能力。
