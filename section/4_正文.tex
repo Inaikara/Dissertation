@@ -1,15 +1,13 @@
 \chapter{基于异构约束观测输入的模仿学习网络}
 
 \section{引言}
-生成式模型已成为机器人学习领域的核心范式之一。基于扩散的运动策略能够利用扩散模型的强大容量，从专家演示中拟合复杂的多峰动作分布。然而，在预训练阶段获得的无约束能力与现实世界部署时的严格约束之间仍然存在关键差距。当机器人在非结构化环境中执行任务时，经常会遇到训练数据中未显式建模的异构约束。这些约束范围广泛，既包括避障和安全操作区域等显式空间限制，也包括速度限制和运动平滑度等隐式动力学要求。虽然生成式策略擅长产生多样化的动作分布，但安全约束通常要求机器人的行为塌缩到狭窄且往往是非凸的动作流形上。如果没有显式的机制来建模这些限制，预训练模型在约束场景下往往表现出脆弱的行为，甚至在遇到分布外场景时发生危险的冲突。
-
-现有的约束遵循方法主要分为反应式滤波、主动引导和参数适配。基于控制屏障函数的反应式方法通过将生成的动作投影到安全集来提供安全保证，但其本质是近视的。在执行层面强制投影动作会破坏扩散生成轨迹的时间连贯性，由于规划流形与安全集之间的不匹配，容易诱发抖动或不稳定性。主动引导方法尝试使用约束分类器的梯度来引导采样过程，但在噪声中间状态上训练准确的分类器面临巨大的优化挑战。参数适配方法中，全参数微调面临灾难性遗忘问题，而低秩适配则缺乏显式调节机制。针对上述问题，本章提出一种名为 ConstrainNet 的模块化残差框架。该框架通过编码约束观测信息，并将残差信号通过跳跃连接注入到冻结的骨干网络中，旨在实现异构约束的即插即用式适配。这种设计不仅能够引导动作生成向满足约束的轨迹收敛，还能够有效地保持预训练模型已有的操作技能。
+生成式模型已成为机器人学习领域的核心范式之一。基于扩散的运动策略能够利用扩散模型的强大容量，从专家演示中拟合复杂的多峰动作分布。然而，在预训练阶段获得的无约束能力与现实世界部署时的严格约束之间仍然存在关键差距。当机器人在非结构化环境中执行任务时，经常会遇到训练数据中未显式建模的异构约束。这些约束范围广泛，既包括避障和安全操作区域等显式空间限制，也包括速度限制和运动平滑度等隐式动力学要求。虽然生成式策略擅长产生多样化的动作分布，但安全约束通常要求机器人的行为塌缩到狭窄且往往是非凸的动作流形上。如果没有显式的机制来建模这些限制，预训练模型在约束场景下往往表现出脆弱的行为，甚至在遇到分布外场景时发生危险的冲突。现有的约束遵循方法主要分为反应式滤波、主动引导和参数适配。基于控制屏障函数的反应式方法通过将生成的动作投影到安全集来提供安全保证，但其本质是近视的。在执行层面强制投影动作会破坏扩散生成轨迹的时间连贯性，由于规划流形与安全集之间的不匹配，容易诱发抖动或不稳定性。主动引导方法尝试使用约束分类器的梯度来引导采样过程，但在噪声中间状态上训练准确的分类器面临巨大的优化挑战。参数适配方法中，全参数微调面临灾难性遗忘问题，而低秩适配则缺乏显式调节机制。针对上述问题，本章提出一种名为 ConstrainNet 的模块化残差框架。该框架通过编码约束观测信息，并将残差信号通过跳跃连接注入到冻结的骨干网络中，旨在实现异构约束的即插即用式适配。这种设计不仅能够引导动作生成向满足约束的轨迹收敛，还能够有效地保持预训练模型已有的操作技能。同时该网络具备对各种类型约束的适应能力，无论是空间约束还是动力学约束，都能够通过相同的架构进行建模和注入，从而实现了高度的模块化和灵活性。并且该网络还具备可组合性，能否通过组合不同类型的 ConstrainNet 模块来同时满足多个约束需求，进一步提升了系统在现实复杂环境中的适应能力。
 
 \begin{figure}[htbp]
     \centering
-    \subfloat[Diffusion Policy]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.a.pdf}}\\
-    \subfloat[Diffusion Policy + ConstrainNet]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.b.pdf}}
-    \caption{基于残差注入的 ConstrainNet 框架架构图}
+    \subfloat[扩散策略]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.acn.pdf}}\\
+    \subfloat[带ConstrainNet的扩散策略]{\includegraphics[width=\textwidth]{figure/chapter4/fig4.1.bcn.pdf}}
+    \caption{基于残差注入的 ConstrainNet 网络示意图}
     \label{fig:constrainnet_overview}
 \end{figure}
 
@@ -74,10 +72,10 @@
 图 \ref{fig:constrainnet_compose} 直观地展示了该组合机制在不同约束配置下的行为表现。在子图 \ref{fig:constrainnet_compose} (a) 中，原始扩散策略在面临未建模的红色圆形障碍物时，生成的动作序列（淡红色虚线）与障碍物发生严重重叠，导致任务失败。子图 \ref{fig:constrainnet_compose} (b) 展示了激活空间约束模块后的效果，机器人生成的轨迹产生了明显的侧向偏移，成功绕过障碍。子图 \ref{fig:constrainnet_compose} (c) 则展示了运动学模块对末端速度的精确控制，相比于 (a) 图，轨迹点分布更加密集，体现了对减速要求的遵循。最后，子图 \ref{fig:constrainnet_compose} (d) 验证了 Dual 配置下的零样本组合能力，系统在无需任何额外联合微调的情况下，通过空间残差与运动学残差的线性叠加，在绕过红色障碍物的同时保持了高密度的慢速步进。这种组合方式的有效性源于不同物理属性的残差信号在特征空间中的解耦性，使得系统能够以“即插即用”的方式应对复杂的多重约束场景。
 \begin{figure}[htbp]
     \centering
-    \subfloat[Difffusion Policy]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.a.pdf}}\hfill
-    \subfloat[Spatial ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.b.pdf}}\\
-    \subfloat[Kinematic ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.c.pdf}}\hfill
-    \subfloat[Dual ConstrainNet]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.d.pdf}}
+    \subfloat[无约束]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.a.pdf}}\hfill
+    \subfloat[空间约束]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.b.pdf}}\\
+    \subfloat[运动学约束]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.c.pdf}}\hfill
+    \subfloat[零样本双约束组合]{\includegraphics[width=0.5\textwidth]{figure/chapter4/fig4.2.d.pdf}}
     \caption{ConstrainNet的零样本多约束组合机制}
     \label{fig:constrainnet_compose}
 \end{figure}
