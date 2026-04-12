@@ -11,12 +11,16 @@
 %编译范围
 
 
-% \includeonly{section/2_预备知识}
-\includeonly{section/5_正文}
+\includeonly{section/6_总结与展望}
+% \includeonly{section/5_正文}
 
 
 %参考文献设置
-\usepackage[backend=biber,style=gb7714-2015,gbalign=gb7714-2015,gbpub=false,gbnamefmt = lowercase]{biblatex}% 可试着设style=gb7714-1987
+\usepackage[backend=biber,style=gb7714-2015,gbalign=gb7714-2015,gbpub=false,gbnamefmt=lowercase,gbpunctin=false]{biblatex}  % 添加gbpuctin=false用于去除//
+% 新添一行代码用于去掉会议前的In
+\DefineBibliographyStrings{english}{in={}}
+
+
 \addbibresource[location=local]{reference.bib} 
 %页眉页脚设置
 \usepackage{fancyhdr}
