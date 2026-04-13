@@ -1,7 +1,22 @@
 \chapter{摘\texorpdfstring{\quad}{}要}
+随着全球科技革命与产业变革的纵深推进，机器人正加速从结构化的工业环境向高度非结构化的居家服务场景迈进。然而，现有的机器人系统仍面对专家示教数据匮乏、动态环境约束复杂以及多模态决策困难等挑战。因此，研究基于观测输入的机器人模仿学习方法，构建从静态图像的书法技能获取到异构约束实时感知，再到通用多模态决策的完整体系，对于推动机器人智能化水平和实现具身智能规模化落地具有重要意义。
 
-\keywordsCN{\LaTeX{}；论文}
+首先，针对书法技能示教中专家数据稀缺且静态图像丢失动态信息的难题，本文提出了一种基于图像观测输入的书法技能模仿学习框架。利用八邻域优先级算法实现笔画拓扑骨架的精准分割，设计了结合主动曲线轴机制的模糊高斯混合模型以解决高曲率笔画的时序编码难题。通过偏差分析算法从像素分布中重构出表征笔画粗细变化的协方差序列，并结合动态运动原语实现了书法技能在不同空间尺度下的自适应泛化。
+
+其次，为了解决生成式扩散策略在部署阶段难以实时遵循环境约束的问题，本文提出了一种模块化残差学习网络 ConstrainNet。该网络通过编码空间避障或运动学限制等异构观测信息，利用零卷积初始化与残差注入机制，在冻结的扩散策略骨干中引入引导偏置，有效避免了灾难性遗忘。实验论证了不同物理约束在特征空间中的解耦特性，实现了多约束条件的零样本组合与即插即用式适配，显著提升了作业安全性。
+
+最后，为了提升系统在复杂交互环境中的自主决策与多任务泛化能力，本文构建了基于多模态观测输入的模仿学习系统。利用自监督学习策略构建语音去噪网络，实现了基于语音指令的约束模块动态调度；集成实时目标检测模块提取障碍物几何特征，构建了闭环感知反馈回路以规避动态障碍。针对大规模预训练中动作空间异构性的挑战，设计了基于对比学习的潜动作编码器，构建了多构型统一的动作表征，并通过引入基于三次多项式插值与滑动窗口滤波的后处理机制，解决了推理频率与执行频率不匹配导致的运动抖动，确保了机器人在执行复杂任务时的运动稳定性。
+
+\keywordsCN{机器人模仿学习；高斯混合模型；动态运动原语；扩散策略；视觉-语言-动作模型}
 
 \chapter{Abstract}
-	
-\keywordsEN{\LaTeX{}; Paper}
+
+With the deepening of the global technological revolution and industrial transformation, robots are accelerating their transition from structured industrial environments to highly unstructured home service scenarios. However, existing robot systems still face challenges such as scarcity of expert demonstration data, complexity of dynamic environmental constraints, and difficulties in multi-modal decision-making. Therefore, researching robot imitation learning methods based on observational input, and constructing a complete system ranging from calligraphic skill acquisition from static images to real-time perception of heterogeneous constraints and then to general-purpose multi-modal decision-making, is of great significance for advancing robot intelligence levels and achieving large-scale deployment of embodied intelligence.
+
+First, to address the problem of scarce expert data and loss of dynamic information in static images during calligraphic skill demonstration, this thesis proposes a calligraphic skill imitation learning framework based on image observational input. The eight-neighbor priority algorithm is employed to achieve precise segmentation of stroke topological skeletons, and a fuzzy Gaussian mixture model combined with an active curve axis mechanism is designed to solve the temporal encoding problem of high-curvature strokes. Through deviation analysis algorithms, covariance sequences characterizing stroke width variations are reconstructed from pixel distributions, and combined with dynamic movement primitives, adaptive generalization of calligraphic skills across different spatial scales is achieved.
+
+Secondly, to address the problem that generative diffusion policies struggle to follow environmental constraints in real-time during deployment, this thesis proposes a modular residual learning network called ConstrainNet. The network encodes heterogeneous observational information such as spatial obstacle avoidance or kinematic constraints, and utilizes zero-initialization convolution and residual injection mechanisms to introduce guided biases into a frozen diffusion policy backbone, effectively avoiding catastrophic forgetting. Experiments demonstrate the decoupling characteristics of different physical constraints in the feature space, achieving zero-shot composition of multiple constraint conditions and plug-and-play adaptation, which significantly improves operational safety.
+
+Finally, to enhance the system's autonomous decision-making capability and multi-task generalization ability in complex interactive environments, this thesis constructs an imitation learning system based on multi-modal observational input. A speech denoising network is built using self-supervised learning strategies to achieve dynamic scheduling of constraint modules based on speech commands; a real-time object detection module is integrated to extract obstacle geometric features, constructing a closed-loop perceptual feedback loop to avoid dynamic obstacles. To address the challenge of action space heterogeneity in large-scale pre-training, a latent action encoder based on contrastive learning is designed to construct a unified multi-configuration action representation. By introducing a post-processing mechanism based on cubic polynomial interpolation and sliding window filtering, the motion jitter caused by the mismatch between inference frequency and execution frequency is solved, ensuring motion stability when the robot executes complex tasks.
+
+\keywordsEN{Robot Imitation Learning; Gaussian Mixture Model; Dynamic Movement Primitives; Diffusion Policy; Vision-Language-Action Models}
