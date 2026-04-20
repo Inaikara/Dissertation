@@ -10,6 +10,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %编译范围
 
+% \includeonly{section/0_摘要}
 % \includeonly{section/1_绪论}
 % \includeonly{section/2_预备知识}
 % \includeonly{section/3_正文}
@@ -46,9 +47,9 @@
 \usepackage[unicode=true,bookmarks=true,bookmarksnumbered=true,bookmarksopen=false,breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true]{hyperref}
 %  \hypersetup{...}主要影响生成的 PDF 文件的元数据（PDF属性）和超链接样式，不会影响论文正文内容的显示。
 \hypersetup{pdftitle={基于观测输入的机器人模仿学习研究},
-	pdfauthor={姓名}, % 可能会泄露作者信息，盲审时请注意
+	pdfauthor={匿名}, % 可能会泄露作者信息，盲审时请注意
 	pdfsubject={华南理工大学硕士学位论文}, % 博士自行修改
-	pdfkeywords={机器人;模仿学习;观测输入;深度学习},
+	pdfkeywords={模仿学习；高斯混合模型；动态运动原语；扩散策略；视觉-语言-动作模型},
 %%		linkcolor=black, anchorcolor=black, citecolor=black, filecolor=black, menucolor=black, urlcolor=black, pdfstartview=FitH}% 黑白，提交版
 	linkcolor=blue, anchorcolor=black, citecolor=red, filecolor=magenta, menucolor=red, urlcolor=magenta, pdfstartview=FitH}% 彩色
 
@@ -63,8 +64,8 @@
 \begin{document}
 	%%%%%%%%%%%%%草稿封面设置%%%%%%%%%%%%%使用“正式封面”时不需要理会这部分
 	\title{基于观测输入的机器人模仿学习研究}
-	\author{许文晋}
-	\supervisor{指导教师：杨辰光\ 教授}
+	\author{匿名}
+	\supervisor{匿名}
 	\institute{华南理工大学}
 	\date{2026年4月}
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -106,7 +107,7 @@
 	\phantomsection % “目录”中的链接能正确跳转，需要添加 \phantomsection 否则点击参考文献会跳转到结论
 	\addcontentsline{toc}{chapter}{参考文献}	%目录中添加参考文献
 	\printbibliography	% 参考文献著录
-	
+	\includepdf[pages=1]{cover_file/papers.pdf} %盲审成果
 	% \include{section/7_研究成果} %成果
 	% \include{section/8_致谢} %致谢
 \end{document}
