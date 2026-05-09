@@ -32,6 +32,7 @@
 *.eps
 *.pptx
 *.txt
+*.docx
 
 .DS_Store
 /assets/
