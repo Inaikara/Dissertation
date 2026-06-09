@@ -1,7 +1,7 @@
 % 注：1. pdfcover的内容根据学校要求自定义（参考cover_file文件夹）。2. 这里代码写得不是很完备，第二个参数只影响封面，其他内容如页眉不受影响。还需在下面代码进一步调整。这里还需完善。为简单期间，下面三个选项供选择：
-\documentclass[unicode,master]{scutthesis} % 硕士草稿封面，使用正式封面时注释该行
+% \documentclass[unicode,master]{scutthesis} % 硕士草稿封面，使用正式封面时注释该行
 % \documentclass[unicode]{scutthesis} %  博士草稿封面，使用正式封面时注释该行
-% \documentclass[unicode,pdfcover]{scutthesis} %   论文正式封面（不使用选项来区分硕博士，而是大家制作自己的封面文件thesis_cover.pdf，盲审时删除必要的封面内容即可），使用草稿封面时注释该行
+\documentclass[unicode,pdfcover]{scutthesis} %   论文正式封面（不使用选项来区分硕博士，而是大家制作自己的封面文件thesis_cover.pdf，盲审时删除必要的封面内容即可），使用草稿封面时注释该行
 
 \usepackage{array,longtable,graphicx} 
 \usepackage{anyfontsize} %消除字体警告
@@ -17,7 +17,7 @@
 % \includeonly{section/4_正文}
 % \includeonly{section/5_正文}
 % \includeonly{section/7_研究成果}
-
+% \includeonly{section/8_致谢}
 
 %参考文献设置
 \usepackage[backend=biber,style=gb7714-2015,gbalign=gb7714-2015,gbpub=false,gbnamefmt=lowercase,gbpunctin=false]{biblatex}  % 添加gbpuctin=false用于去除//
@@ -107,7 +107,8 @@
 	\phantomsection % “目录”中的链接能正确跳转，需要添加 \phantomsection 否则点击参考文献会跳转到结论
 	\addcontentsline{toc}{chapter}{参考文献}	%目录中添加参考文献
 	\printbibliography	% 参考文献著录
-	\includepdf[pages=1]{cover_file/papers.pdf} %盲审成果
-	% \include{section/7_研究成果} %成果
-	% \include{section/8_致谢} %致谢
+	% \includepdf[pages=1]{cover_file/papers.pdf} %盲审成果
+	\include{section/7_研究成果} %成果
+	\include{section/8_致谢} %致谢
+	% \includepdf[pages=1]{cover_file/答辩决议书.pdf}
 \end{document}

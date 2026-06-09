@@ -33,6 +33,7 @@
 *.pptx
 *.txt
 *.docx
+*.md
 
 .DS_Store
 /assets/
